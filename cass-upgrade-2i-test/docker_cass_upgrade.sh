@@ -34,9 +34,14 @@ cat > init.cql <<EOF
 CREATE KEYSPACE testkeyspace WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 USE testkeyspace;
 
-CREATE TABLE repro02 (id text, c2 text, version text, primary key(id)) WITH COMPACT STORAGE;
+CREATE TABLE repro01 (id text, c2 text, version text, primary key(id)) WITH COMPACT STORAGE;
+INSERT INTO repro01 (id,c2,version) values ('a','b','v01');
+CREATE INDEX idx_repro01 ON repro01 (c2);
+
+CREATE TABLE repro02 (id text, c2 text, version text, primary key(id));
 INSERT INTO repro02 (id,c2,version) values ('a','b','v01');
 CREATE INDEX idx_repro02 ON repro02 (c2);
+
 EOF
 
 # Function to extract cassandra.yaml from a container
@@ -70,13 +75,16 @@ docker cp init.cql $CONTAINER2_NAME:$CQL_SCRIPT
 docker exec -i $CONTAINER2_NAME cqlsh -f $CQL_SCRIPT
 
 #docker exec -i $CONTAINER2_NAME cqlsh -e "SELECT * FROM testkeyspace.testtable;"
+echo TEST WITH COMPACT STORAGE
+docker exec -i $CONTAINER2_NAME cqlsh -e "SELECT * FROM testkeyspace.repro01 where c2 = 'b';"
+echo TEST WITHOUT COMPACT STORAGE
 docker exec -i $CONTAINER2_NAME cqlsh -e "SELECT * FROM testkeyspace.repro02 where c2 = 'b';"
 
 # Flush the data to disk
 docker exec -i $CONTAINER2_NAME nodetool flush
 docker exec -i $CONTAINER2_NAME nodetool drain
 sleep 15
-docker exec -i $CONTAINER2_NAME ls -ltraAR /var/lib/cassandra/data/testkeyspace/
+#docker exec -i $CONTAINER2_NAME ls -ltraAR /var/lib/cassandra/data/testkeyspace/
 docker logs $CONTAINER2_NAME > cassandra22_logs.txt
 
 # Stop Cassandra 2.2 container
@@ -100,8 +108,11 @@ docker exec -i $CONTAINER3_NAME nodetool upgradesstables
 
 # Verify the data in Cassandra 3.11
 #docker exec -i $CONTAINER3_NAME cqlsh -e "SELECT * FROM testkeyspace.testtable;"
+echo TEST WITH COMPACT STORAGE
+docker exec -i $CONTAINER3_NAME cqlsh -e "SELECT * FROM testkeyspace.repro01 where c2 = 'b';"
+echo TEST WITHOUT COMPACT STORAGE
 docker exec -i $CONTAINER3_NAME cqlsh -e "SELECT * FROM testkeyspace.repro02 where c2 = 'b';"
-docker exec -i $CONTAINER3_NAME ls -ltraAR /var/lib/cassandra/data/testkeyspace/
+# docker exec -i $CONTAINER3_NAME ls -ltraAR /var/lib/cassandra/data/testkeyspace/
 #docker exec -i $CONTAINER3_NAME ls -ltr /var/lib/cassandra/data/testkeyspace/repro02-*/.idx_repro02/
 
 docker logs $CONTAINER3_NAME > cassandra311_logs.txt
@@ -128,8 +139,11 @@ echo "Waiting for Cassandra 4.0 to start..."
 sleep 30
 
 #docker exec -i $CONTAINER4_NAME cqlsh -e "SELECT * FROM testkeyspace.testtable;"
+echo TEST WITH COMPACT STORAGE
+docker exec -i $CONTAINER4_NAME cqlsh -e "SELECT * FROM testkeyspace.repro01 where c2 = 'b';"
+echo TEST WITHOUT COMPACT STORAGE
 docker exec -i $CONTAINER4_NAME cqlsh -e "SELECT * FROM testkeyspace.repro02 where c2 = 'b';"
-docker exec -i $CONTAINER4_NAME ls -ltraAR /var/lib/cassandra/data/testkeyspace/
+# docker exec -i $CONTAINER4_NAME ls -ltraAR /var/lib/cassandra/data/testkeyspace/
 #docker exec -i $CONTAINER4_NAME ls -ltr /var/lib/cassandra/data/testkeyspace/repro02-*/.idx_repro02/
 
 # Extract logs from Cassandra 4.0
