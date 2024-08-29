@@ -13,6 +13,9 @@ CQLD_SCRIPT="/tmp/delete.cql"
 CONFIG_DIR="$(pwd)/cassandra-config"
 LOG_FILE="cassandra41_logs.txt"
 
+keyspace="test"
+table="my_table"
+
 # Clean up any existing containers
 docker rm -f $CONTAINER_NAME || true
 docker volume rm $VOLUME_NAME || true
@@ -29,10 +32,10 @@ mkdir -p $CONFIG_DIR
 
 # Write CQL script to initialize Cassandra
 cat > init.cql <<EOF
-CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
-USE test;
+CREATE KEYSPACE $keyspace WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+USE $keyspace;
 
-CREATE TABLE daily_tiered_import_size (
+CREATE TABLE $table (
     day int,
     tier_level int,
     hour int,
@@ -44,9 +47,9 @@ CREATE TABLE daily_tiered_import_size (
 EOF
 
 cat > update.cql <<EOF
-USE test;
-UPDATE daily_tiered_import_size set imported_tier_data_size= imported_tier_data_size+76167372947893 where day = 20240725 and tier_level = 1 and hour = -1 and pgc_key = -1;
-SELECT * from daily_tiered_import_size where day = 20240725 and tier_level = 1;
+USE $keyspace;
+UPDATE $table set imported_tier_data_size= imported_tier_data_size+76167372947893 where day = 20240725 and tier_level = 1 and hour = -1 and pgc_key = -1;
+SELECT * from $table where day = 20240725 and tier_level = 1;
 EOF
 
 # Function to extract cassandra.yaml from a container
@@ -80,10 +83,9 @@ docker exec -i $CONTAINER_NAME cqlsh -f $CQL_SCRIPT
 # To copy the sstable, you need the UUID of the table created
 read -p "Provide UUID: " uuid
 
-keyspace="test"
 
 docker cp /path/to/sstables $CONTAINER_NAME:/var/lib/cassandra/data/$keyspace/tenant_b_c360-$uuid/
-docker exec -i $CONTAINER_NAME nodetool import $keyspace tenant_b_c360
+docker exec -i $CONTAINER_NAME nodetool import $keyspace $table
 docker exec -i $CONTAINER_NAME nodetool scrub
 
 read -p "Press Enter to continue" </dev/tty
