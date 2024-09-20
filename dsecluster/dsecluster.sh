@@ -237,5 +237,3 @@ case $cmdopt in
       usage
       ;;
 esac
-
-
