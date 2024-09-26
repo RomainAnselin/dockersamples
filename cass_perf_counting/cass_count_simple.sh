@@ -30,6 +30,7 @@ function cassandra_build {
     sleep 70
 
     # Exec the init script
+    docker exec -i $cass_cont "ps -ef | grep java" > java_cmd.txt
     docker cp init.cql $cass_cont:init.cql
     docker exec -i $cass_cont cqlsh -f init.cql
     docker exec -i $cass_cont cqlsh -e "describe keyspace test"
@@ -43,9 +44,9 @@ echo "Deploying Python 3.9 container..."
 cat << EOF > Dockerfile
 FROM python:3.9
 RUN pip install cassandra-driver argparse
-COPY countobj.py /app/countobj.py
+COPY objcount.py /app/objcount.py
 WORKDIR /app
-ENTRYPOINT ["python3", "countobj.py"]
+ENTRYPOINT ["python3", "objcount.py"]
 EOF
 
 cleanup () {

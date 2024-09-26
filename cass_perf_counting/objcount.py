@@ -2,10 +2,9 @@ import argparse
 import datetime
 import random, string
 
-from cassandra.cluster import Cluster
+from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement
-from cassandra.cluster import ExecutionProfile
 from cassandra.policies import WhiteListRoundRobinPolicy
 
 def randomword(length):
@@ -17,15 +16,17 @@ def arguments():
     parser = argparse.ArgumentParser(description='Statistics script')
     parser.add_argument('-i', '--host', type=str, required=True, help="IP address for Cassandra")
     parser.add_argument('-k', '--keyspace', type=str, required=True, help="Keyspace to query")
-    parser.add_argument('-t', '--table', type=str, required=False, help="Table to query - defaults to api_portal_portalapi", default='api_portal_portalapi')
+    parser.add_argument('-t', '--table', type=str, required=False, help="Table to query - defaults to count_perf", default='count_perf')
     parser.add_argument('-f', '--fetch', type=int, required=False, help="fetch size", default='5000')
+    parser.add_argument('-d', '--debug', type=str, required=False, help="debug file", default='query_debug.log')
     args = parser.parse_args()
 
     casshost = args.host
     ks = args.keyspace
     tbl = args.table
     fetch = args.fetch
-    return casshost, ks, tbl, fetch
+    debug_file = args.debug
+    return casshost, ks, tbl, fetch, debug_file
 
 
 def insert_blob(session, ks, tbl):
@@ -36,6 +37,8 @@ def insert_blob(session, ks, tbl):
     
 
 def gateway_insert(session, ks, tbl):
+    #session.execute("CREATE KEYSPACE IF NOT EXISTS " + ks + " WITH replication = {'class': 'SimpleStrategy' , 'replication_factor': 3};")
+    #session.execute("CREATE TABLE IF NOT EXISTS " + ks + "." + tbl + " (key int primary key, blob text);")
     blobins_prep = insert_blob(session, ks, tbl)
 
     for i in range (0, 100000):
@@ -46,7 +49,7 @@ def gateway_insert(session, ks, tbl):
             print( "Written " + str(i) + " records so far, time now " + str(datetime.datetime.now()) )
 
 
-def gateway_query(session, ks, tbl, fetch):
+def gateway_query(session, ks, tbl, fetch, debug_file):
     row_count = 0
     row_sizes = []
     row_keys = []
@@ -84,7 +87,15 @@ def gateway_query(session, ks, tbl, fetch):
 
     try:
         ### Sync query
-        result = session.execute(portalcount)
+        result = session.execute(portalcount, execution_profile='long', trace=True)
+        trace = result.get_query_trace()
+        print(trace.trace_id)
+
+        f = open(debug_file, "w")
+        for e in trace.events:
+            f.write(str(e.source_elapsed) + "\t" + str( e.description) + "\n")
+        f.close()
+
         ### Async query
         # future = session.execute_async(portalcount, trace=True)
         # result = future.result()
@@ -128,53 +139,21 @@ def calculate_row_statistics(row_sizes):
     }
 
 def main():
-    host, ks, tbl, fetch = arguments()
+    host, ks, tbl, fetch, debug_file = arguments()
+
+    profile = ExecutionProfile(
+        # load_balancing_policy=RoundRobinPolicy(),
+        request_timeout=25  # Set to 30 seconds
+    )
 
     profile_long = ExecutionProfile(request_timeout=30)
-    cluster = Cluster([host], port=9042, execution_profiles={'long': profile_long})
+    
+    cluster = Cluster([host], port=9042, execution_profiles={EXEC_PROFILE_DEFAULT: profile, 'long': profile_long})
     #cluster = Cluster([host], port=9042)
 
     session = cluster.connect()
     gateway_insert(session, ks, tbl)
-    gateway_query(session, ks, tbl, fetch)
+    gateway_query(session, ks, tbl, fetch, debug_file)
     
 if __name__ == "__main__":
     main()
-
-
-# CREATE TABLE romain.api_portal_portalapi (
-#     key text PRIMARY KEY,
-#     "basePath" text,
-#     blob text,
-#     consumes text,
-#     "createdBy" text,
-#     "createdOn" text,
-#     description text,
-#     "hasOriginalDefinition" text,
-#     hash text,
-#     id text,
-#     "importUrl" text,
-#     integral text,
-#     models text,
-#     name text,
-#     "organizationId" text,
-#     produces text,
-#     properties text,
-#     "resourcePath" text,
-#     "serviceType" text,
-#     summary text,
-#     type text,
-#     version text
-# );
-# CREATE TABLE romain.api_portal_portalapimethod (
-#     key text PRIMARY KEY,
-#     "apiId" text,
-#     blob text,
-#     description text,
-#     id text,
-#     name text,
-#     path text,
-#     properties text,
-#     summary text,
-#     verb text
-# );
