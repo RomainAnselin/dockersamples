@@ -2,7 +2,7 @@
 # Blame Peter G for any issues
 
 usage() { 
-    echo "Usage: $0 [-p root_install_path] [-n number_of_nodes] [-g jvm_memory_size] [-v version] prepare/launch/start/stop/remove/destroy" 2>&1;
+    echo "Usage: $0 [-p root_install_path] [-n number_of_nodes] [-g jvm_memory_size] [-v version] prepare/launch/start/stop/remove/destroy"
     echo "For example, run the command:"
     echo -e "\t$0 -p /docker -n 3 -v 6.8.50 prepare"
     echo "to create the paths required and extract configuration files. These paths will contain the persistent data for the nodes in the local file system."
@@ -45,7 +45,7 @@ checkpath() {
     if [ x"$path" == x ]
     then
         echo 'The path parameter not set. You need to use the -p parameter with the '$cmdopt' option.';
-    exit;
+        exit 1;
     fi
 }
 
@@ -53,7 +53,7 @@ checknodes() {
     if [ x"$nodes" == x ]
     then
         echo 'The number of nodes parameter not set. You need to use the -n parameter with the '$cmdopt' option.';
-        exit;
+        exit 1;
     fi
 }
 
@@ -61,7 +61,7 @@ checkversion(){
     if [ x"$version" == x ]
     then
         echo 'The version parameter not set. You need to use the -v parameter with the '$cmdopt' option.';
-        exit;
+        exit 1;
     fi
 }
 
@@ -69,7 +69,7 @@ checkmem() {
     if [ x"$mem" == x ]
     then
         echo 'The memory parameter not set. You need to use the -g parameter with the '$cmdopt' option.';
-        exit;
+        exit 1;
     fi
 }
 
@@ -95,8 +95,6 @@ create_paths () {
         echo 'For node'$t
         docker cp tmpdse-$version:/opt/dse/resources/cassandra/conf/cassandra.yaml $path/dse-$version/node$t/config
         docker cp tmpdse-$version:/opt/dse/resources/dse/conf/dse.yaml $path/dse-$version/node$t/config
-        echo ' Setting num_tokens to 8...'
-        echo 'num_tokens: 8' >> $path/dse-$version/node$t/config/cassandra.yaml
         if [ "$s" -ne "1" ]
         then
             echo ' Setting allocate_tokens_for_local_replication_factor to 3'
@@ -121,7 +119,6 @@ destroy_paths () {
       echo 'Run the command:'
       echo -e '\tsudo rm -rf '$path'/dse-'$version
       echo 'The script will not do this for you in case you have put in the wrong path.'
-      exit
 }
 
 create_network () {
@@ -148,6 +145,7 @@ launch_nodes () {
 		   --net dse-net --ip="172.18.0.1$j" \
 		   -e JVM_EXTRA_OPTS="-Xmx$jvmmem -Xms$jvmmem" \
 		   -e SEEDS="172.18.0.10" \
+       -e NUM_TOKENS="8" \
 		   -v $path/dse-$version/node$j/data:/var/lib/cassandra \
 		   -v $path/dse-$version/node$j/log:/var/log/cassandra \
 		   -v $path/dse-$version/node$j/config:/config \
@@ -158,7 +156,6 @@ launch_nodes () {
         echo "Waiting 60 seconds to allow the nodes to start..."
         sleep 60
       done
-      exit
 }
 
 remove_nodes () {
@@ -169,7 +166,6 @@ remove_nodes () {
         echo 'Deleting node dse-'$version'-node'$j'...'
 	    docker rm dse-$version-node$j
       done
-      exit
 }
 
 start_nodes () {
